@@ -1,11 +1,19 @@
 from pathlib import Path
 
 from memory_bus import MemoryBus
-from parser import parse_memory_file
+from parser import (
+    parse_instruction_file,
+    parse_memory_file,
+)
 
 
 PROJECT_DIRECTORY = Path(__file__).parent
-MEMORY_FILE = PROJECT_DIRECTORY / "programs" / "memory.txt"
+MEMORY_FILE = (
+    PROJECT_DIRECTORY / "programs" / "memory.txt"
+)
+PROGRAM_FILE = (
+    PROJECT_DIRECTORY / "programs" / "program.asm"
+)
 
 
 def main() -> None:
@@ -19,7 +27,23 @@ def main() -> None:
     for address, value in sorted(initial_values.items()):
         print(f"Loaded MEM[{address}] = {value}")
 
-    print("\nMemory Bus:")
+    print("\nLoading CPU instructions...")
+
+    instructions = parse_instruction_file(PROGRAM_FILE)
+
+    for index, instruction in enumerate(instructions):
+        address = index * 4
+        print(
+            f"PC={address:>3}: "
+            f"{instruction.opcode} "
+            f"{', '.join(instruction.operands)}"
+        )
+
+    print(
+        f"\nLoaded {len(instructions)} instructions."
+    )
+
+    print("\nInitial Memory Bus:")
     print(memory)
 
 

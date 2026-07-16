@@ -1,0 +1,16 @@
+# MiniMIPS example program
+
+CACHE 1
+
+ADDI R1, R0, 10
+ADDI R2, R0, 20
+ADD R3, R1, R2
+
+SW R3, 0(R0)
+LW R4, 0(R0)
+
+SLT R5, R1, R2
+BNE R1, R2, 1
+ADDI R6, R0, 999
+
+HALT
