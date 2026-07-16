@@ -19,9 +19,11 @@ class CPU:
             register: 0
             for register in self.REGISTER_NAMES
         }
+
         self.instructions: list[Instruction] = []
         self.pc = 0
         self.halted = False
+        self._pc_changed = False
 
     def load_program(
         self,
@@ -31,14 +33,16 @@ class CPU:
         self.instructions = list(instructions)
         self.pc = 0
         self.halted = False
+        self._pc_changed = False
 
     def reset(self) -> None:
-        """Reset the registers and CPU state."""
+        """Reset registers and CPU state."""
         for register in self.registers:
             self.registers[register] = 0
 
         self.pc = 0
         self.halted = False
+        self._pc_changed = False
 
     def read_register(self, register: str) -> int:
         """Read a value from a register."""
@@ -52,7 +56,7 @@ class CPU:
         value: int,
     ) -> None:
         """
-        Write a value to a register.
+        Write an integer value to a register.
 
         R0 always remains zero.
         """
@@ -76,7 +80,10 @@ class CPU:
 
         instruction_index = self.pc // 4
 
-        if instruction_index < 0 or instruction_index >= len(self.instructions):
+        if (
+            instruction_index < 0
+            or instruction_index >= len(self.instructions)
+        ):
             raise RuntimeError(
                 f"No instruction exists at PC={self.pc}. "
                 "The program may be missing HALT."
@@ -102,6 +109,8 @@ class CPU:
         if self.halted:
             raise RuntimeError("The CPU is already halted.")
 
+        self._pc_changed = False
+
         instruction = self.fetch()
         self.decode(instruction)
 
@@ -110,6 +119,9 @@ class CPU:
             "ADDI": self._execute_addi,
             "SUB": self._execute_sub,
             "SLT": self._execute_slt,
+            "BNE": self._execute_bne,
+            "J": self._execute_j,
+            "JAL": self._execute_jal,
             "LW": self._execute_lw,
             "SW": self._execute_sw,
             "HALT": self._execute_halt,
@@ -125,11 +137,9 @@ class CPU:
 
         handler(instruction)
 
-        # HALT leaves the PC pointing at the HALT instruction.
-        if not self.halted:
+        if not self.halted and not self._pc_changed:
             self.pc += 4
 
-        # Enforce the MIPS convention that R0 is always zero.
         self.registers["R0"] = 0
 
     def run(self, max_steps: int = 1000) -> None:
@@ -227,6 +237,73 @@ class CPU:
             f"= {result}"
         )
 
+    def _execute_bne(
+        self,
+        instruction: Instruction,
+    ) -> None:
+        """Branch when two registers are not equal."""
+        source_one, source_two, offset_text = instruction.operands
+
+        first_value = self.read_register(source_one)
+        second_value = self.read_register(source_two)
+        offset = self._parse_integer(offset_text)
+
+        if first_value != second_value:
+            target_address = self.pc + 4 + (offset * 4)
+            self._set_pc(target_address)
+
+            self._print_trace(
+                f"EXECUTE {source_one}({first_value}) != "
+                f"{source_two}({second_value}); "
+                f"branch to PC={target_address}"
+            )
+        else:
+            self._print_trace(
+                f"EXECUTE {source_one}({first_value}) == "
+                f"{source_two}({second_value}); "
+                "branch not taken"
+            )
+
+    def _execute_j(
+        self,
+        instruction: Instruction,
+    ) -> None:
+        """Jump to target instruction address."""
+        (target_text,) = instruction.operands
+        target = self._parse_integer(target_text)
+
+        if target < 0:
+            raise ValueError("Jump target cannot be negative.")
+
+        target_address = target * 4
+        self._set_pc(target_address)
+
+        self._print_trace(
+            f"EXECUTE jump to PC={target_address}"
+        )
+
+    def _execute_jal(
+        self,
+        instruction: Instruction,
+    ) -> None:
+        """Save the return address in R7 and jump."""
+        (target_text,) = instruction.operands
+        target = self._parse_integer(target_text)
+
+        if target < 0:
+            raise ValueError("Jump target cannot be negative.")
+
+        return_address = self.pc + 4
+        target_address = target * 4
+
+        self.write_register("R7", return_address)
+        self._set_pc(target_address)
+
+        self._print_trace(
+            f"EXECUTE R7 <- {return_address}; "
+            f"jump to PC={target_address}"
+        )
+
     def _execute_lw(
         self,
         instruction: Instruction,
@@ -280,6 +357,21 @@ class CPU:
         """Stop program execution."""
         self.halted = True
         self._print_trace("EXECUTE CPU halted")
+
+    def _set_pc(self, address: int) -> None:
+        """Set the program counter during a branch or jump."""
+        if address < 0:
+            raise ValueError(
+                "Program counter cannot be negative."
+            )
+
+        if address % 4 != 0:
+            raise ValueError(
+                f"Program counter must be word-aligned: {address}"
+            )
+
+        self.pc = address
+        self._pc_changed = True
 
     @classmethod
     def _parse_memory_operand(

@@ -1,15 +1,20 @@
-# MiniMIPS arithmetic and memory demonstration
+# MiniMIPS control-flow demonstration
 
-ADDI R1, R0, 10
-ADDI R2, R0, 20
+ADDI R1, R0, 1
+ADDI R2, R0, 2
 
-ADD R3, R1, R2
-SUB R4, R3, R1
+# R1 and R2 differ, so skip the next instruction
+BNE R1, R2, 1
+ADDI R3, R0, 999
 
-SW R3, 16(R0)
-LW R5, 16(R0)
+# Save PC + 4 in R7 and jump to instruction 6
+JAL 6
+ADDI R4, R0, 111
 
-SLT R6, R1, R2
-SLT R7, R2, R1
+ADDI R5, R0, 55
+
+# Jump to instruction 9
+J 9
+ADDI R6, R0, 999
 
 HALT
