@@ -1,3 +1,4 @@
+from cache import Cache
 from memory_bus import MemoryBus
 from parser import Instruction
 
@@ -11,9 +12,11 @@ class CPU:
         self,
         memory_bus: MemoryBus,
         trace: bool = True,
+        cache: Cache | None = None,
     ) -> None:
         self.memory_bus = memory_bus
         self.trace = trace
+        self.cache = cache or Cache(memory_bus)
 
         self.registers: dict[str, int] = {
             register: 0
@@ -29,14 +32,12 @@ class CPU:
         self,
         instructions: list[Instruction],
     ) -> None:
-        """Load instructions and prepare the CPU to run."""
         self.instructions = list(instructions)
         self.pc = 0
         self.halted = False
         self._pc_changed = False
 
     def reset(self) -> None:
-        """Reset registers and CPU state."""
         for register in self.registers:
             self.registers[register] = 0
 
@@ -44,8 +45,11 @@ class CPU:
         self.halted = False
         self._pc_changed = False
 
+        self.cache.disable()
+        self.cache.flush()
+        self.cache.reset_stats()
+
     def read_register(self, register: str) -> int:
-        """Read a value from a register."""
         register = register.upper()
         self._validate_register(register)
         return self.registers[register]
@@ -55,11 +59,6 @@ class CPU:
         register: str,
         value: int,
     ) -> None:
-        """
-        Write an integer value to a register.
-
-        R0 always remains zero.
-        """
         register = register.upper()
         self._validate_register(register)
 
@@ -72,7 +71,6 @@ class CPU:
         self.registers[register] = value
 
     def fetch(self) -> Instruction:
-        """Fetch the instruction at the current PC address."""
         if self.pc % 4 != 0:
             raise RuntimeError(
                 f"Program counter must be word-aligned: PC={self.pc}"
@@ -94,18 +92,15 @@ class CPU:
         self._print_trace(
             f"FETCH   PC={self.pc}: {instruction.source}"
         )
-
         return instruction
 
     def decode(self, instruction: Instruction) -> None:
-        """Display the decoded opcode and operands."""
         self._print_trace(
             f"DECODE  opcode={instruction.opcode} "
             f"operands={list(instruction.operands)}"
         )
 
     def step(self) -> None:
-        """Fetch, decode, and execute one instruction."""
         if self.halted:
             raise RuntimeError("The CPU is already halted.")
 
@@ -124,6 +119,7 @@ class CPU:
             "JAL": self._execute_jal,
             "LW": self._execute_lw,
             "SW": self._execute_sw,
+            "CACHE": self._execute_cache,
             "HALT": self._execute_halt,
         }
 
@@ -131,7 +127,7 @@ class CPU:
 
         if handler is None:
             raise ValueError(
-                f"CPU does not yet support "
+                f"CPU does not support "
                 f"{instruction.opcode} execution."
             )
 
@@ -143,7 +139,6 @@ class CPU:
         self.registers["R0"] = 0
 
     def run(self, max_steps: int = 1000) -> None:
-        """Run instructions until HALT is executed."""
         if max_steps <= 0:
             raise ValueError("max_steps must be greater than zero.")
 
@@ -160,7 +155,6 @@ class CPU:
             steps += 1
 
     def dump_registers(self) -> dict[str, int]:
-        """Return a copy of the CPU registers."""
         return self.registers.copy()
 
     def _execute_add(
@@ -221,7 +215,6 @@ class CPU:
         self,
         instruction: Instruction,
     ) -> None:
-        """Set destination to 1 if source one is less than source two."""
         destination, source_one, source_two = instruction.operands
 
         first_value = self.read_register(source_one)
@@ -233,15 +226,13 @@ class CPU:
         self._print_trace(
             f"EXECUTE {destination} <- "
             f"1 if {source_one}({first_value}) < "
-            f"{source_two}({second_value}) else 0 "
-            f"= {result}"
+            f"{source_two}({second_value}) else 0 = {result}"
         )
 
     def _execute_bne(
         self,
         instruction: Instruction,
     ) -> None:
-        """Branch when two registers are not equal."""
         source_one, source_two, offset_text = instruction.operands
 
         first_value = self.read_register(source_one)
@@ -260,15 +251,13 @@ class CPU:
         else:
             self._print_trace(
                 f"EXECUTE {source_one}({first_value}) == "
-                f"{source_two}({second_value}); "
-                "branch not taken"
+                f"{source_two}({second_value}); branch not taken"
             )
 
     def _execute_j(
         self,
         instruction: Instruction,
     ) -> None:
-        """Jump to target instruction address."""
         (target_text,) = instruction.operands
         target = self._parse_integer(target_text)
 
@@ -286,7 +275,6 @@ class CPU:
         self,
         instruction: Instruction,
     ) -> None:
-        """Save the return address in R7 and jump."""
         (target_text,) = instruction.operands
         target = self._parse_integer(target_text)
 
@@ -308,7 +296,6 @@ class CPU:
         self,
         instruction: Instruction,
     ) -> None:
-        """Load a value from memory into a register."""
         destination, memory_operand = instruction.operands
 
         offset, base_register = self._parse_memory_operand(
@@ -317,21 +304,21 @@ class CPU:
 
         base_address = self.read_register(base_register)
         address = base_address + offset
-        value = self.memory_bus.read(address)
+        value = self.cache.read(address)
 
         self.write_register(destination, value)
 
         self._print_trace(
             f"EXECUTE {destination} <- "
             f"MEM[{base_register}({base_address}) + "
-            f"{offset}] = MEM[{address}] = {value}"
+            f"{offset}] = MEM[{address}] = {value} "
+            f"[CACHE {self.cache.last_status}]"
         )
 
     def _execute_sw(
         self,
         instruction: Instruction,
     ) -> None:
-        """Store a register value in memory."""
         source, memory_operand = instruction.operands
 
         offset, base_register = self._parse_memory_operand(
@@ -342,24 +329,44 @@ class CPU:
         address = base_address + offset
         value = self.read_register(source)
 
-        self.memory_bus.write(address, value)
+        self.cache.write(address, value)
 
         self._print_trace(
             f"EXECUTE MEM[{base_register}({base_address}) + "
             f"{offset}] = MEM[{address}] <- "
-            f"{source}({value})"
+            f"{source}({value}) "
+            f"[CACHE {self.cache.last_status}]"
         )
+
+    def _execute_cache(
+        self,
+        instruction: Instruction,
+    ) -> None:
+        (code_text,) = instruction.operands
+        code = self._parse_integer(code_text)
+
+        if code == 0:
+            self.cache.disable()
+            self._print_trace("EXECUTE cache disabled")
+        elif code == 1:
+            self.cache.enable()
+            self._print_trace("EXECUTE cache enabled")
+        elif code == 2:
+            self.cache.flush()
+            self._print_trace("EXECUTE cache flushed")
+        else:
+            raise ValueError(
+                "CACHE code must be 0, 1, or 2."
+            )
 
     def _execute_halt(
         self,
         instruction: Instruction,
     ) -> None:
-        """Stop program execution."""
         self.halted = True
         self._print_trace("EXECUTE CPU halted")
 
     def _set_pc(self, address: int) -> None:
-        """Set the program counter during a branch or jump."""
         if address < 0:
             raise ValueError(
                 "Program counter cannot be negative."
@@ -378,12 +385,6 @@ class CPU:
         cls,
         operand: str,
     ) -> tuple[int, str]:
-        """
-        Parse an operand such as 8(R2), -4(R3), or 0x10(R1).
-
-        Returns:
-            A tuple containing (offset, base_register).
-        """
         if not operand.endswith(")") or "(" not in operand:
             raise ValueError(
                 f"Invalid memory operand: {operand}. "
@@ -409,7 +410,6 @@ class CPU:
 
     @staticmethod
     def _parse_integer(value: str) -> int:
-        """Parse a decimal, negative, or hexadecimal integer."""
         try:
             return int(value, 0)
         except ValueError as error:

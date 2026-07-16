@@ -1,20 +1,23 @@
-# MiniMIPS control-flow demonstration
+# MiniMIPS cache demonstration
 
-ADDI R1, R0, 1
-ADDI R2, R0, 2
+# Turn the cache on
+CACHE 1
 
-# R1 and R2 differ, so skip the next instruction
-BNE R1, R2, 1
-ADDI R3, R0, 999
+# First read is a miss; second read is a hit
+LW R1, 0(R0)
+LW R2, 0(R0)
 
-# Save PC + 4 in R7 and jump to instruction 6
-JAL 6
-ADDI R4, R0, 111
+# Store through the cache and read the cached value
+ADDI R3, R0, 123
+SW R3, 16(R0)
+LW R4, 16(R0)
 
-ADDI R5, R0, 55
+# Flush the cache; the next read is a miss again
+CACHE 2
+LW R5, 0(R0)
 
-# Jump to instruction 9
-J 9
-ADDI R6, R0, 999
+# Turn the cache off; this read bypasses the cache
+CACHE 0
+LW R6, 4(R0)
 
 HALT

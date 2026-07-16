@@ -58,7 +58,6 @@ def main() -> None:
     cpu.load_program(instructions)
 
     print("\nStarting CPU...\n")
-
     cpu.run()
 
     print("\nFinal Registers:")
@@ -67,6 +66,12 @@ def main() -> None:
         cpu.dump_registers().items()
     ):
         print(f"{register} = {value}")
+
+    print("\nFinal Memory Bus:")
+    print(memory)
+
+    print("\nFinal Cache:")
+    print(cpu.cache)
 
     print(f"\nFinal PC = {cpu.pc}")
     print(f"CPU halted = {cpu.halted}")
