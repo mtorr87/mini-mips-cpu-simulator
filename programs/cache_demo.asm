@@ -1,0 +1,13 @@
+# Cache demonstration
+
+CACHE 1
+LW R1, 0(R0)
+LW R2, 0(R0)
+ADDI R3, R0, 123
+SW R3, 16(R0)
+LW R4, 16(R0)
+CACHE 2
+LW R5, 0(R0)
+CACHE 0
+LW R6, 4(R0)
+HALT
