@@ -1,24 +1,25 @@
+from pathlib import Path
+
 from memory_bus import MemoryBus
+from parser import parse_memory_file
+
+
+PROJECT_DIRECTORY = Path(__file__).parent
+MEMORY_FILE = PROJECT_DIRECTORY / "programs" / "memory.txt"
 
 
 def main() -> None:
-    memory = MemoryBus()
-
     print("Loading initial memory values...")
 
-    memory.load_initial_values(
-        {
-            0: 100,
-            4: 200,
-            8: 300,
-        }
-    )
+    initial_values = parse_memory_file(MEMORY_FILE)
 
-    print(memory)
+    memory = MemoryBus()
+    memory.load_initial_values(initial_values)
 
-    print("\nWriting a new value...")
-    memory.write(4, 999)
+    for address, value in sorted(initial_values.items()):
+        print(f"Loaded MEM[{address}] = {value}")
 
+    print("\nMemory Bus:")
     print(memory)
 
 
