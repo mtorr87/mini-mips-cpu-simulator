@@ -185,7 +185,112 @@ class TestCPU(unittest.TestCase):
     def test_invalid_register_raises_error(self) -> None:
         with self.assertRaises(ValueError):
             self.cpu.read_register("R8")
+def test_slt_sets_one_when_condition_is_true(self) -> None:
+    self.cpu.write_register("R1", 10)
+    self.cpu.write_register("R2", 20)
 
+    self.cpu.load_program(
+        [
+            self.make_instruction(
+                "SLT R3, R1, R2"
+            )
+        ]
+    )
+
+    self.cpu.step()
+
+    self.assertEqual(
+        self.cpu.read_register("R3"),
+        1,
+    )
+
+def test_slt_sets_zero_when_condition_is_false(self) -> None:
+    self.cpu.write_register("R1", 30)
+    self.cpu.write_register("R2", 20)
+
+    self.cpu.load_program(
+        [
+            self.make_instruction(
+                "SLT R3, R1, R2"
+            )
+        ]
+    )
+
+    self.cpu.step()
+
+    self.assertEqual(
+        self.cpu.read_register("R3"),
+        0,
+    )
+
+def test_sw_stores_register_value_in_memory(self) -> None:
+    self.cpu.write_register("R1", 75)
+
+    self.cpu.load_program(
+        [
+            self.make_instruction(
+                "SW R1, 8(R0)"
+            )
+        ]
+    )
+
+    self.cpu.step()
+
+    self.assertEqual(
+        self.memory.read(8),
+        75,
+    )
+
+def test_lw_loads_memory_value_into_register(self) -> None:
+    self.memory.write(12, 125)
+
+    self.cpu.load_program(
+        [
+            self.make_instruction(
+                "LW R2, 12(R0)"
+            )
+        ]
+    )
+
+    self.cpu.step()
+
+    self.assertEqual(
+        self.cpu.read_register("R2"),
+        125,
+    )
+
+def test_memory_address_uses_base_register_and_offset(
+    self,
+) -> None:
+    self.cpu.write_register("R1", 20)
+    self.memory.write(28, 500)
+
+    self.cpu.load_program(
+        [
+            self.make_instruction(
+                "LW R2, 8(R1)"
+            )
+        ]
+    )
+
+    self.cpu.step()
+
+    self.assertEqual(
+        self.cpu.read_register("R2"),
+        500,
+    )
+
+def test_invalid_memory_operand_raises_error(self) -> None:
+    self.cpu.load_program(
+        [
+            self.make_instruction(
+                "LW R1, INVALID"
+            )
+        ]
+    )
+
+    with self.assertRaises(ValueError):
+        self.cpu.step()
 
 if __name__ == "__main__":
     unittest.main()
